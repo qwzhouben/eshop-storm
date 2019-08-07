@@ -36,6 +36,7 @@ public class ProductCountBolt extends BaseRichBolt {
         zkSession = ZookeeperSession.getInstance();
         new Thread(new ProductCountThread()).start();
         taskid = context.getThisTaskId();
+        log.info("【ProductCountBolt获取到taskid】taskid=" + taskid);
         /**
          * 1. 将自己的taskid写入一个zookeeper node中，形成taskid的列表
          * 2. 然后每次都将自己的热门商品列表，写入自己的taskid对应的zookeeper节点
@@ -60,7 +61,7 @@ public class ProductCountBolt extends BaseRichBolt {
         if (!"".equals(taskidList)) {
             taskidList += ",";
         } else {
-            taskidList += taskidList;
+            taskidList += thisTaskId;
         }
         zkSession.setNodeData("/taskid-list", taskidList);
         log.info("【ProductCountBolt设置node taskid list】taskidList=" + taskidList);
