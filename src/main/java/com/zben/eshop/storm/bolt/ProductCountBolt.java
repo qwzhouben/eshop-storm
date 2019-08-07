@@ -92,8 +92,8 @@ public class ProductCountBolt extends BaseRichBolt {
                     for (int i = 0; i < topnProductList.size(); i++) {
                         for (int j = 0; j < topnProductList.size()-i-1; j++) {
                             if (topnProductList.get(j).getValue() < topnProductList.get(j+1).getValue()) {
-                                Map.Entry<Long, Long> big = topnProductList.get(j);
-                                Map.Entry<Long, Long> small = topnProductList.get(j+1);
+                                Map.Entry<Long, Long> big = topnProductList.get(j+1);
+                                Map.Entry<Long, Long> small = topnProductList.get(j);
                                 topnProductList.set(j, big);
                                 topnProductList.set(j+1, small);
                             }
