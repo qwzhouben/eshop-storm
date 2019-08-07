@@ -59,7 +59,7 @@ public class ProductCountBolt extends BaseRichBolt {
         log.info("【ProductCountBolt获取到node  taskid list】taskidList=" + taskidList);
 
         if (!"".equals(taskidList)) {
-            taskidList += ",";
+            taskidList += "," + thisTaskId;
         } else {
             taskidList += thisTaskId;
         }
