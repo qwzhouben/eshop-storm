@@ -21,11 +21,11 @@ public class HotProductTopology {
     public static void main(String[] args) {
         TopologyBuilder builder = new TopologyBuilder();
         builder.setSpout("AccessLogKafkaSpout", new AccessLogKafkaSpout(), 1);
-        builder.setBolt("LogParseBolt", new LogParseBolt(), 5)
-                .setNumTasks(5)
+        builder.setBolt("LogParseBolt", new LogParseBolt(), 2)
+                .setNumTasks(2)
                 .shuffleGrouping("AccessLogKafkaSpout");
-        builder.setBolt("ProductCountBolt", new ProductCountBolt(), 5)
-                .setNumTasks(10)
+        builder.setBolt("ProductCountBolt", new ProductCountBolt(), 2)
+                .setNumTasks(2)
                 .fieldsGrouping("LogParseBolt", new Fields("productId"));
         Config config = new Config();
 

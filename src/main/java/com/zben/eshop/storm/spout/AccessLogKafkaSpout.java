@@ -5,6 +5,7 @@ import kafka.consumer.ConsumerConfig;
 import kafka.consumer.ConsumerIterator;
 import kafka.consumer.KafkaStream;
 import kafka.javaapi.consumer.ConsumerConnector;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.storm.spout.SpoutOutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -26,6 +27,7 @@ import java.util.concurrent.ArrayBlockingQueue;
  * @author: jhon.zhou
  * @date: 2019/8/6 0006 11:41
  */
+@Slf4j
 public class AccessLogKafkaSpout extends BaseRichSpout {
 
     private SpoutOutputCollector collector;
@@ -78,6 +80,7 @@ public class AccessLogKafkaSpout extends BaseRichSpout {
             ConsumerIterator<byte[], byte[]> it = kafkaStream.iterator();
             while (it.hasNext()) {
                 String message = new String(it.next().message());
+                log.info("【AccessLogKafkaSpout中的Kafka消费者接收到一条日志】message=" + message);
                 try {
                     queue.put(message);
                 } catch (InterruptedException e) {
@@ -100,6 +103,7 @@ public class AccessLogKafkaSpout extends BaseRichSpout {
             try {
                 String message = queue.take();
                 collector.emit(new Values(message));
+                log.info("【AccessLogKafkaSpout发射出去一条日志】message=" + message);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }

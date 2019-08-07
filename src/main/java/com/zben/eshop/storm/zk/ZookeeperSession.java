@@ -163,6 +163,14 @@ public class ZookeeperSession {
         }
     }
 
+    public void createNode(String path) {
+        try {
+            zookeeper.create(path, "".getBytes(), ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
+        } catch (Exception e) {
+
+        }
+    }
+
     /**
      * 静态内部类实现单例
      */

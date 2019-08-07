@@ -1,6 +1,7 @@
 package com.zben.eshop.storm.bolt;
 
 import com.alibaba.fastjson.JSONObject;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -19,6 +20,7 @@ import java.util.Map;
  * @author: jhon.zhou
  * @date: 2019/8/6 0006 13:34
  */
+@Slf4j
 public class LogParseBolt extends BaseRichBolt {
 
     private OutputCollector collector;
@@ -39,11 +41,13 @@ public class LogParseBolt extends BaseRichBolt {
     @Override
     public void execute(Tuple tuple) {
         String message = tuple.getStringByField("message");
+        log.info("【LogParseBolt接收到一条日志】message=" + message);
         JSONObject messageJson = JSONObject.parseObject(message);
         JSONObject uriArgsJson = messageJson.getJSONObject("uri_args");
         Long productId = uriArgsJson.getLong("productId");
         if(productId != null) {
             collector.emit(new Values(productId));
+            log.info("【LogParseBolt发射出去一个商品id】productId=" + productId);
         }
     }
 

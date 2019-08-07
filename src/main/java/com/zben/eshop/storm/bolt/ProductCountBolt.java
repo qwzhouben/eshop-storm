@@ -2,6 +2,7 @@ package com.zben.eshop.storm.bolt;
 
 import com.alibaba.fastjson.JSONArray;
 import com.zben.eshop.storm.zk.ZookeeperSession;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -19,6 +20,7 @@ import java.util.Map;
  * @author: jhon.zhou
  * @date: 2019/8/6 0006 13:41
  */
+@Slf4j
 public class ProductCountBolt extends BaseRichBolt {
 
     /**
@@ -51,13 +53,17 @@ public class ProductCountBolt extends BaseRichBolt {
          */
         zkSession.acquireDistributedLock();
 
+        zkSession.createNode("/taskid-list");
         String taskidList = zkSession.getNodeData("/taskid-list");
+        log.info("【ProductCountBolt获取到node  taskid list】taskidList=" + taskidList);
+
         if (!"".equals(taskidList)) {
             taskidList += ",";
         } else {
             taskidList += taskidList;
         }
         zkSession.setNodeData("/taskid-list", taskidList);
+        log.info("【ProductCountBolt设置node taskid list】taskidList=" + taskidList);
 
         zkSession.releaseDistributedLock();
     }
@@ -67,14 +73,15 @@ public class ProductCountBolt extends BaseRichBolt {
         @Override
         public void run() {
             List<Map.Entry<Long, Long>> topnProductList = new ArrayList<>();
+            List<Long> productList = new ArrayList<>();
             while (true) {
                 topnProductList.clear();
-
+                productList.clear();
                 if (productCountMap.size() == 0) {
                     Utils.sleep(200);
                     continue;
                 }
-
+                log.info("【ProductCountThread打印productCountMap的长度】size=" + productCountMap.size());
                 for (Map.Entry<Long, Long> productCountEntry : productCountMap.entrySet()) {
                     topnProductList.add(productCountEntry);
                 }
@@ -93,9 +100,14 @@ public class ProductCountBolt extends BaseRichBolt {
                 topnProductList = topnProductList.subList(0, topnProductList.size() > TOP ? TOP : topnProductList.size());
 
                 //获取到一个topn list
-                String topnProductListJSON = JSONArray.toJSONString(topnProductList);
-                zkSession.setNodeData("/task-hot-product-list-" + taskid, topnProductListJSON);
+                for (Map.Entry<Long, Long> longLongEntry : topnProductList) {
+                    productList.add(longLongEntry.getKey());
+                }
+                String topnProductListJSON = JSONArray.toJSONString(productList);
 
+                zkSession.createNode("/task-hot-product-list-" + taskid);
+                zkSession.setNodeData("/task-hot-product-list-" + taskid, topnProductListJSON);
+                log.info("【ProductCountThread计算出一份top3热门商品列表】zk path=" + ("/task-hot-product-list-" + taskid) + ", topnProductListJSON=" + topnProductListJSON);
                 Utils.sleep(10000);
             }
 
@@ -143,12 +155,15 @@ public class ProductCountBolt extends BaseRichBolt {
     @Override
     public void execute(Tuple tuple) {
         Long productId = tuple.getLongByField("productId");
+
+        log.info("【ProductCountBolt接收到一个商品id】 productId=" + productId);
         Long count = productCountMap.get(productId);
         if (count == null) {
             count = 0L;
         }
         count++;
         productCountMap.put(productId, count);
+        log.info("【ProductCountBolt完成商品访问次数统计】productId=" + productId + ", count=" + count);
     }
 
     @Override
