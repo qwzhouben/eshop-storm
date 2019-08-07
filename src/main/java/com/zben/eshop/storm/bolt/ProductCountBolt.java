@@ -76,40 +76,45 @@ public class ProductCountBolt extends BaseRichBolt {
             List<Map.Entry<Long, Long>> topnProductList = new ArrayList<>();
             List<Long> productList = new ArrayList<>();
             while (true) {
-                topnProductList.clear();
-                productList.clear();
-                if (productCountMap.size() == 0) {
-                    Utils.sleep(200);
-                    continue;
-                }
-                log.info("【ProductCountThread打印productCountMap的长度】size=" + productCountMap.size());
-                for (Map.Entry<Long, Long> productCountEntry : productCountMap.entrySet()) {
-                    topnProductList.add(productCountEntry);
-                }
-
-                // 比较大小，冒泡排序，取出前3个  生成最热topn的算法有很多种
-                for (int i = 0; i < topnProductList.size(); i++) {
-                    for (int j = 0; j < topnProductList.size()-i-1; j++) {
-                        if (topnProductList.get(j).getValue() > topnProductList.get(j+1).getValue()) {
-                            Map.Entry<Long, Long> big = topnProductList.get(j);
-                            Map.Entry<Long, Long> small = topnProductList.get(j+1);
-                            topnProductList.set(j, big);
-                            topnProductList.set(j+1, small);
+                try {
+                    topnProductList.clear();
+                    productList.clear();
+                    if (productCountMap.size() == 0) {
+                        Utils.sleep(200);
+                        continue;
+                    }
+                    log.info("【ProductCountThread打印productCountMap的长度】size=" + productCountMap.size());
+                    for (Map.Entry<Long, Long> productCountEntry : productCountMap.entrySet()) {
+                        topnProductList.add(productCountEntry);
+                    }
+                    log.info("【统计前的topnProductList={}】", topnProductList);
+                    // 比较大小，冒泡排序，取出前3个  生成最热topn的算法有很多种
+                    for (int i = 0; i < topnProductList.size(); i++) {
+                        for (int j = 0; j < topnProductList.size()-i-1; j++) {
+                            if (topnProductList.get(j).getValue() < topnProductList.get(j+1).getValue()) {
+                                Map.Entry<Long, Long> big = topnProductList.get(j);
+                                Map.Entry<Long, Long> small = topnProductList.get(j+1);
+                                topnProductList.set(j, big);
+                                topnProductList.set(j+1, small);
+                            }
                         }
                     }
-                }
-                topnProductList = topnProductList.subList(0, topnProductList.size() > TOP ? TOP : topnProductList.size());
+                    topnProductList = topnProductList.subList(0, topnProductList.size() > TOP ? TOP : topnProductList.size());
+                    log.info("【统计后的topnProductList={}】", topnProductList);
+                    //获取到一个topn list
+                    for (Map.Entry<Long, Long> longLongEntry : topnProductList) {
+                        productList.add(longLongEntry.getKey());
+                    }
+                    log.info("【productList={}】", productList);
+                    String topnProductListJSON = JSONArray.toJSONString(productList);
 
-                //获取到一个topn list
-                for (Map.Entry<Long, Long> longLongEntry : topnProductList) {
-                    productList.add(longLongEntry.getKey());
+                    zkSession.createNode("/task-hot-product-list-" + taskid);
+                    zkSession.setNodeData("/task-hot-product-list-" + taskid, topnProductListJSON);
+                    log.info("【ProductCountThread计算出一份top3热门商品列表】zk path=" + ("/task-hot-product-list-" + taskid) + ", topnProductListJSON=" + topnProductListJSON);
+                    Utils.sleep(10000);
+                } catch (Exception e) {
+                    e.printStackTrace();
                 }
-                String topnProductListJSON = JSONArray.toJSONString(productList);
-
-                zkSession.createNode("/task-hot-product-list-" + taskid);
-                zkSession.setNodeData("/task-hot-product-list-" + taskid, topnProductListJSON);
-                log.info("【ProductCountThread计算出一份top3热门商品列表】zk path=" + ("/task-hot-product-list-" + taskid) + ", topnProductListJSON=" + topnProductListJSON);
-                Utils.sleep(10000);
             }
 
             /*while(true) {
