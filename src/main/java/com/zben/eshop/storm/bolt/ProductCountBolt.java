@@ -3,6 +3,7 @@ package com.zben.eshop.storm.bolt;
 import com.alibaba.fastjson.JSONArray;
 import com.google.common.collect.Lists;
 import com.zben.eshop.storm.zk.ZookeeperSession;
+import http.HttpClientUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
@@ -186,7 +187,7 @@ public class ProductCountBolt extends BaseRichBolt {
                         topnProductList.add(productCountEntry);
                     }
                     log.info("【排序前的topnProductList={}】", topnProductList);
-                    // 比较大小，冒泡排序，取出前3个  生成最热topn的算法有很多种
+                    // 比较大小，冒泡排序
                     for (int i = 0; i < topnProductList.size(); i++) {
                         for (int j = 0; j < topnProductList.size()-i-1; j++) {
                             if (topnProductList.get(j).getValue() < topnProductList.get(j+1).getValue()) {
@@ -211,6 +212,21 @@ public class ProductCountBolt extends BaseRichBolt {
                     for (Map.Entry<Long, Long> entry : topnProductList) {
                         if (avgCount * 10 < entry.getValue()) {
                             hotProductIdList.add(entry.getKey());
+
+                            //将缓存热点反向推送到流量分发的nginx中
+                            HttpClientUtils.sendGetRequest("http://192.168.2.99/hot?productId=" + entry.getKey());
+
+                            //将缓存热点，那个商品对应的完整的缓存数据，发送请求到缓存服务去获取，反向推送到所有的后端应用nginx服务器上去
+                            String resp = HttpClientUtils.sendGetRequest("http://192.168.2.217:8080/getProductInfo?productId=" + entry.getKey());
+
+                            String[] appNginxURLs = new String[]{
+                                "http://192.168.3.105/hot?productId=" + entry.getKey() + "&productInfo=" + resp,
+                                    "http://192.168.3.82/hot?productId=" + entry.getKey() + "&productInfo=" + resp
+                            };
+
+                            for (String appNginxURL : appNginxURLs) {
+                                HttpClientUtils.sendGetRequest(appNginxURL);
+                            }
                         }
                     }
 
