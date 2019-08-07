@@ -1,6 +1,7 @@
 package com.zben.eshop.storm.bolt;
 
 import com.alibaba.fastjson.JSONArray;
+import com.google.common.collect.Lists;
 import com.zben.eshop.storm.zk.ZookeeperSession;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.storm.task.OutputCollector;
@@ -35,6 +36,7 @@ public class ProductCountBolt extends BaseRichBolt {
     public void prepare(Map map, TopologyContext context, OutputCollector collector) {
         zkSession = ZookeeperSession.getInstance();
         new Thread(new ProductCountThread()).start();
+        new Thread(new HotProductThread()).start();
         taskid = context.getThisTaskId();
         log.info("【ProductCountBolt获取到taskid】taskid=" + taskid);
         /**
@@ -155,6 +157,68 @@ public class ProductCountBolt extends BaseRichBolt {
 
                 Utils.sleep(60000);
             }*/
+        }
+    }
+
+    private class HotProductThread implements Runnable {
+        List<Map.Entry<Long, Long>> topnProductList = new ArrayList<>();
+        List<Long> hotProductIdList = Lists.newArrayList();
+
+        @Override
+        public void run() {
+            while (true) {
+                /**
+                 * 1. 将LRUMap中的数据按照访问次数，进行全局排序
+                 * 2. 计算95%的商品的访问次数平均值
+                 * 3. 遍历排序后的商品访问次数，从最大的开始
+                 * 4. 如果某个商品它的访问量是平均值的10倍，就认为是缓存热点
+                 */
+                try {
+                    topnProductList.clear();
+                    hotProductIdList.clear();
+
+                    if (productCountMap.size() == 0) {
+                        Utils.sleep(200);
+                        continue;
+                    }
+                    log.info("【ProductCountThread打印productCountMap的长度】size=" + productCountMap.size());
+                    for (Map.Entry<Long, Long> productCountEntry : productCountMap.entrySet()) {
+                        topnProductList.add(productCountEntry);
+                    }
+                    log.info("【排序前的topnProductList={}】", topnProductList);
+                    // 比较大小，冒泡排序，取出前3个  生成最热topn的算法有很多种
+                    for (int i = 0; i < topnProductList.size(); i++) {
+                        for (int j = 0; j < topnProductList.size()-i-1; j++) {
+                            if (topnProductList.get(j).getValue() < topnProductList.get(j+1).getValue()) {
+                                Map.Entry<Long, Long> big = topnProductList.get(j+1);
+                                Map.Entry<Long, Long> small = topnProductList.get(j);
+                                topnProductList.set(j, big);
+                                topnProductList.set(j+1, small);
+                            }
+                        }
+                    }
+                    log.info("【排序后的topnProductList={}】", topnProductList);
+
+                    //2.计算95%的商品的访问次数平均值
+                    long calculateCount = Math.round(topnProductList.size() * 0.95);
+                    long totalCount = 0l;
+                    for (int i =topnProductList.size() - 1; i >= topnProductList.size() - calculateCount; i--) {
+                        totalCount += topnProductList.get(i).getValue();
+                    }
+                    long avgCount = totalCount / calculateCount;
+
+                    //3. 从第一个元素开始遍历，判断是否是平均值得10倍
+                    for (Map.Entry<Long, Long> entry : topnProductList) {
+                        if (avgCount * 10 < entry.getValue()) {
+                            hotProductIdList.add(entry.getKey());
+                        }
+                    }
+
+                    Utils.sleep(5000);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
