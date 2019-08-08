@@ -5,6 +5,10 @@ import com.google.common.collect.Lists;
 import com.zben.eshop.storm.zk.ZookeeperSession;
 import http.HttpClientUtils;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.http.NameValuePair;
+import org.apache.http.client.utils.URLEncodedUtils;
+import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.protocol.HTTP;
 import org.apache.storm.task.OutputCollector;
 import org.apache.storm.task.TopologyContext;
 import org.apache.storm.topology.OutputFieldsDeclarer;
@@ -215,20 +219,25 @@ public class ProductCountBolt extends BaseRichBolt {
                         if (avgCount * 10 < entry.getValue()) {
                             log.info("【HotProductThread发现一个热点】entry={}", entry);
                             hotProductIdList.add(entry.getKey());
+                            if(!lastTimeHotProductIdList.contains(entry.getKey())) {
+                                //将缓存热点反向推送到流量分发的nginx中
+                                HttpClientUtils.sendGetRequest("http://192.168.2.99/hot?productId=" + entry.getKey());
 
-                            //将缓存热点反向推送到流量分发的nginx中
-                            HttpClientUtils.sendGetRequest("http://192.168.2.99/hot?productId=" + entry.getKey());
+                                //将缓存热点，那个商品对应的完整的缓存数据，发送请求到缓存服务去获取，反向推送到所有的后端应用nginx服务器上去
+                                String resp = HttpClientUtils.sendGetRequest("http://192.168.2.217:8080/getProductInfo?productId=" + entry.getKey());
 
-                            //将缓存热点，那个商品对应的完整的缓存数据，发送请求到缓存服务去获取，反向推送到所有的后端应用nginx服务器上去
-                            String resp = HttpClientUtils.sendGetRequest("http://192.168.2.217:8080/getProductInfo?productId=" + entry.getKey());
+                                List<NameValuePair> params = new ArrayList<NameValuePair>();
+                                params.add(new BasicNameValuePair("productInfo", resp));
+                                String productInfo = URLEncodedUtils.format(params, HTTP.UTF_8);
 
-                            String[] appNginxURLs = new String[]{
-                                "http://192.168.3.105/hot?productId=" + entry.getKey() + "&productInfo=" + resp,
-                                    "http://192.168.3.82/hot?productId=" + entry.getKey() + "&productInfo=" + resp
-                            };
+                                String[] appNginxURLs = new String[]{
+                                        "http://192.168.3.105/hot?productId=" + entry.getKey() + "&" + productInfo,
+                                        "http://192.168.3.82/hot?productId=" + entry.getKey() + "&" + productInfo
+                                };
 
-                            for (String appNginxURL : appNginxURLs) {
-                                HttpClientUtils.sendGetRequest(appNginxURL);
+                                for (String appNginxURL : appNginxURLs) {
+                                    HttpClientUtils.sendGetRequest(appNginxURL);
+                                }
                             }
                         }
                     }
@@ -238,11 +247,11 @@ public class ProductCountBolt extends BaseRichBolt {
                         if (hotProductIdList.size() > 0) {
                             lastTimeHotProductIdList.addAll(hotProductIdList);
                         }
-                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList=" + lastTimeHotProductIdList);
+                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList={}", lastTimeHotProductIdList);
                     } else {
                         for (Long productId : lastTimeHotProductIdList) {
                             if (!hotProductIdList.contains(productId)) {
-                                log.info("【HotProductThread发现一个热点消失了】productId=" + productId);
+                                log.info("【HotProductThread发现一个热点消失了】productId={}", productId);
                                 // 说明上次的那个商品id的热点，消失了
                                 // 发送一个http请求给到流量分发的nginx中，取消热点缓存的标识
                                 HttpClientUtils.sendGetRequest("http://192.168.2.99/cancel_hot?productId="+productId);
@@ -252,7 +261,7 @@ public class ProductCountBolt extends BaseRichBolt {
                         if (hotProductIdList.size() > 0) {
                             lastTimeHotProductIdList.addAll(hotProductIdList);
                         }
-                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList=" + lastTimeHotProductIdList);
+                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList={}", lastTimeHotProductIdList);
                     }
 
                     Utils.sleep(5000);
