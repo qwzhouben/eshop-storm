@@ -167,8 +167,8 @@ public class ProductCountBolt extends BaseRichBolt {
 
     private class HotProductThread implements Runnable {
         List<Map.Entry<Long, Long>> topnProductList = new ArrayList<>();
-        List<Long> hotProductIdList = Lists.newArrayList();
-        List<Long> lastTimeHotProductIdList = Lists.newArrayList();
+        List<Long> hotProductIdList = new ArrayList<>();
+        List<Long> lastTimeHotProductIdList = new ArrayList<>();
 
         @Override
         public void run() {
@@ -205,14 +205,17 @@ public class ProductCountBolt extends BaseRichBolt {
                     }
                     log.info("【排序后的topnProductList={}】", topnProductList);
 
-                    //2.计算95%的商品的访问次数平均值
-                    long calculateCount = Math.round(topnProductList.size() * 0.95);
-                    long totalCount = 0l;
-                    for (int i =topnProductList.size() - 1; i >= topnProductList.size() - calculateCount; i--) {
+                    // 2、计算出95%的商品的访问次数的平均值
+                    int calculateCount = (int)Math.floor(topnProductList.size() * 0.95);
+
+                    Long totalCount = 0L;
+                    for(int i = topnProductList.size() - 1; i >= topnProductList.size() - calculateCount; i--) {
                         totalCount += topnProductList.get(i).getValue();
                     }
-                    long avgCount = totalCount / calculateCount;
-                    log.info("【95%商品的平均值】avgCount={}", avgCount);
+
+                    Long avgCount = totalCount / calculateCount;
+
+                    log.info("【HotProductFindThread计算出95%的商品的访问次数平均值】avgCount=" + avgCount);
 
                     //3. 从第一个元素开始遍历，判断是否是平均值得10倍
                     for (Map.Entry<Long, Long> entry : topnProductList) {
@@ -245,7 +248,9 @@ public class ProductCountBolt extends BaseRichBolt {
                     //4. 热点缓存消失的实时自动识别和感知
                     if (lastTimeHotProductIdList.size() == 0) {
                         if (hotProductIdList.size() > 0) {
-                            lastTimeHotProductIdList.addAll(hotProductIdList);
+                            for(Long productId : hotProductIdList) {
+                                lastTimeHotProductIdList.add(productId);
+                            }
                         }
                         log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList={}", lastTimeHotProductIdList);
                     } else {
@@ -259,7 +264,9 @@ public class ProductCountBolt extends BaseRichBolt {
                         }
                         lastTimeHotProductIdList.clear();
                         if (hotProductIdList.size() > 0) {
-                            lastTimeHotProductIdList.addAll(hotProductIdList);
+                            for(Long productId : hotProductIdList) {
+                                lastTimeHotProductIdList.add(productId);
+                            }
                         }
                         log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList={}", lastTimeHotProductIdList);
                     }
