@@ -164,6 +164,7 @@ public class ProductCountBolt extends BaseRichBolt {
     private class HotProductThread implements Runnable {
         List<Map.Entry<Long, Long>> topnProductList = new ArrayList<>();
         List<Long> hotProductIdList = Lists.newArrayList();
+        List<Long> lastTimeHotProductIdList = Lists.newArrayList();
 
         @Override
         public void run() {
@@ -207,10 +208,12 @@ public class ProductCountBolt extends BaseRichBolt {
                         totalCount += topnProductList.get(i).getValue();
                     }
                     long avgCount = totalCount / calculateCount;
+                    log.info("【95%商品的平均值】avgCount={}", avgCount);
 
                     //3. 从第一个元素开始遍历，判断是否是平均值得10倍
                     for (Map.Entry<Long, Long> entry : topnProductList) {
                         if (avgCount * 10 < entry.getValue()) {
+                            log.info("【HotProductThread发现一个热点】entry={}", entry);
                             hotProductIdList.add(entry.getKey());
 
                             //将缓存热点反向推送到流量分发的nginx中
@@ -228,6 +231,28 @@ public class ProductCountBolt extends BaseRichBolt {
                                 HttpClientUtils.sendGetRequest(appNginxURL);
                             }
                         }
+                    }
+
+                    //4. 热点缓存消失的实时自动识别和感知
+                    if (lastTimeHotProductIdList.size() == 0) {
+                        if (hotProductIdList.size() > 0) {
+                            lastTimeHotProductIdList.addAll(hotProductIdList);
+                        }
+                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList=" + lastTimeHotProductIdList);
+                    } else {
+                        for (Long productId : lastTimeHotProductIdList) {
+                            if (!hotProductIdList.contains(productId)) {
+                                log.info("【HotProductThread发现一个热点消失了】productId=" + productId);
+                                // 说明上次的那个商品id的热点，消失了
+                                // 发送一个http请求给到流量分发的nginx中，取消热点缓存的标识
+                                HttpClientUtils.sendGetRequest("http://192.168.2.99/cancel_hot?productId="+productId);
+                            }
+                        }
+                        lastTimeHotProductIdList.clear();
+                        if (hotProductIdList.size() > 0) {
+                            lastTimeHotProductIdList.addAll(hotProductIdList);
+                        }
+                        log.info("【HotProductThread保存上次热点数据】lastTimeHotProductIdList=" + lastTimeHotProductIdList);
                     }
 
                     Utils.sleep(5000);
